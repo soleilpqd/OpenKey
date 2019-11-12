@@ -21,6 +21,10 @@ static vector<Uint8> _charKeyCode = {
 static vector<Uint8> _breakCode = {
     KEY_ESC, KEY_TAB, KEY_ENTER, KEY_RETURN, KEY_LEFT, KEY_RIGHT, KEY_DOWN, KEY_UP, KEY_COMMA, KEY_DOT,
     KEY_SLASH, KEY_SEMICOLON, KEY_QUOTE, KEY_BACK_SLASH, KEY_MINUS, KEY_EQUALS, KEY_BACKQUOTE, KEY_TAB
+#if _WIN32
+	, VK_INSERT, VK_HOME, VK_END, VK_DELETE, VK_PRIOR, VK_NEXT, VK_SNAPSHOT, VK_PRINT, VK_SELECT, VK_HELP,
+	VK_EXECUTE, VK_NUMLOCK, VK_SCROLL
+#endif
 };
 
 static vector<Uint8> _macroBreakCode = {
@@ -264,6 +268,14 @@ void checkSpelling(const bool& forceCheckVowel=false) {
                 }
             }
             
+            //limit: end consonant "ch", "t" can not use with "~", "`", "?"
+            if (_spellingOK) {
+                if (_index >= 3 && CHR(_index-1) == KEY_H && CHR(_index-2) == KEY_C && !((TypingWord[_index-3] & MARK1_MASK) || (TypingWord[_index-3] & MARK5_MASK) || !(TypingWord[_index-3] & MARK_MASK))) {
+                    _spellingOK = false;
+                } else if (_index >= 2 && CHR(_index-1) == KEY_T && !((TypingWord[_index-2] & MARK1_MASK) || (TypingWord[_index-2] & MARK5_MASK) || !(TypingWord[_index-2] & MARK_MASK))) {
+                    _spellingOK = false;
+                }
+            }
         }
     } else {
         _spellingOK = true;
@@ -1217,8 +1229,8 @@ void vSetCheckSpelling() {
     _useSpellCheckingBefore = vCheckSpelling;
 }
 
-void vTempOffEngine() {
-    _willTempOffEngine = true;
+void vTempOffEngine(const bool& off) {
+    _willTempOffEngine = off;
 }
 
 bool checkQuickConsonant() {

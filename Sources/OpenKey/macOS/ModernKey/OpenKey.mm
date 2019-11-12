@@ -35,7 +35,8 @@ extern "C" {
     
     //app which error with unicode Compound
     NSArray* _unicodeCompoundApp = @[@"com.apple.",
-                                     @"com.google.Chrome", @"com.brave.Browser", @"com.microsoft.Edge.Dev", @"com.microsoft.Edge", @"com.microsoft.edgemac.Dev"];
+                                     @"com.google.Chrome", @"com.brave.Browser",
+                                     @"com.microsoft.edgemac.Dev", @"com.microsoft.edgemac.Beta", @"com.microsoft.Edge.Dev", @"com.microsoft.Edge"];
     
     CGEventSourceRef myEventSource = NULL;
     vKeyHookState* pData;
@@ -57,7 +58,8 @@ extern "C" {
     Uint16 _uniChar[2];
     int _i, _j, _k;
     Uint32 _tempChar;
-    
+    bool _hasJustUsedHotKey = false;
+
     int _languageTemp = 0; //use for smart switch key
     vector<Byte> savedSmartSwitchKeyData; ////use for smart switch key
     
@@ -204,9 +206,13 @@ extern "C" {
     
     void SendPureCharacter(const Uint16& ch) {
         _newEventDown = CGEventCreateKeyboardEvent(myEventSource, 0, true);
+        _newEventUp = CGEventCreateKeyboardEvent(myEventSource, 0, false);
         CGEventKeyboardSetUnicodeString(_newEventDown, 1, &ch);
+        CGEventKeyboardSetUnicodeString(_newEventUp, 1, &ch);
         CGEventTapPostEvent(_proxy, _newEventDown);
+        CGEventTapPostEvent(_proxy, _newEventUp);
         CFRelease(_newEventDown);
+        CFRelease(_newEventUp);
         if (IS_DOUBLE_CODE(vCodeTable)) {
             InsertKeyLength(1);
         }
@@ -233,26 +239,35 @@ extern "C" {
             CGEventSetFlags(_newEventUp, _privateFlag);
             CGEventTapPostEvent(_proxy, _newEventDown);
             CGEventTapPostEvent(_proxy, _newEventUp);
-            CFRelease(_newEventUp);
         } else {
             if (vCodeTable == 0) { //unicode 2 bytes code
                 _newEventDown = CGEventCreateKeyboardEvent(myEventSource, 0, true);
+                _newEventUp = CGEventCreateKeyboardEvent(myEventSource, 0, false);
                 CGEventKeyboardSetUnicodeString(_newEventDown, 1, &_newChar);
+                CGEventKeyboardSetUnicodeString(_newEventUp, 1, &_newChar);
                 CGEventTapPostEvent(_proxy, _newEventDown);
+                CGEventTapPostEvent(_proxy, _newEventUp);
             } else if (vCodeTable == 1 || vCodeTable == 2 || vCodeTable == 4) { //others such as VNI Windows, TCVN3: 1 byte code
                 _newCharHi = HIBYTE(_newChar);
                 _newChar = LOBYTE(_newChar);
                 
                 _newEventDown = CGEventCreateKeyboardEvent(myEventSource, 0, true);
+                _newEventUp = CGEventCreateKeyboardEvent(myEventSource, 0, false);
                 CGEventKeyboardSetUnicodeString(_newEventDown, 1, &_newChar);
+                CGEventKeyboardSetUnicodeString(_newEventUp, 1, &_newChar);
                 CGEventTapPostEvent(_proxy, _newEventDown);
-                
+                CGEventTapPostEvent(_proxy, _newEventUp);
                 if (_newCharHi > 32) {
                     if (vCodeTable == 2) //VNI
                         InsertKeyLength(2);
+                    CFRelease(_newEventDown);
+                    CFRelease(_newEventUp);
                     _newEventDown = CGEventCreateKeyboardEvent(myEventSource, 0, true);
+                    _newEventUp = CGEventCreateKeyboardEvent(myEventSource, 0, false);
                     CGEventKeyboardSetUnicodeString(_newEventDown, 1, &_newCharHi);
+                    CGEventKeyboardSetUnicodeString(_newEventUp, 1, &_newCharHi);
                     CGEventTapPostEvent(_proxy, _newEventDown);
+                    CGEventTapPostEvent(_proxy, _newEventUp);
                 } else {
                     if (vCodeTable == 2) //VNI
                         InsertKeyLength(1);
@@ -264,11 +279,15 @@ extern "C" {
                 _uniChar[1] = _newCharHi > 0 ? (_unicodeCompoundMark[_newCharHi - 1]) : 0;
                 InsertKeyLength(_newCharHi > 0 ? 2 : 1);
                 _newEventDown = CGEventCreateKeyboardEvent(myEventSource, 0, true);
+                _newEventUp = CGEventCreateKeyboardEvent(myEventSource, 0, false);
                 CGEventKeyboardSetUnicodeString(_newEventDown, (_newCharHi > 0 ? 2 : 1), _uniChar);
+                CGEventKeyboardSetUnicodeString(_newEventUp, (_newCharHi > 0 ? 2 : 1), _uniChar);
                 CGEventTapPostEvent(_proxy, _newEventDown);
+                CGEventTapPostEvent(_proxy, _newEventUp);
             }
         }
         CFRelease(_newEventDown);
+        CFRelease(_newEventUp);
     }
     
     void SendEmptyCharacter() {
@@ -281,9 +300,13 @@ extern "C" {
         }
         
         _newEventDown = CGEventCreateKeyboardEvent(myEventSource, 0, true);
+        _newEventUp = CGEventCreateKeyboardEvent(myEventSource, 0, false);
         CGEventKeyboardSetUnicodeString(_newEventDown, 1, &_newChar);
+        CGEventKeyboardSetUnicodeString(_newEventUp, 1, &_newChar);
         CGEventTapPostEvent(_proxy, _newEventDown);
+        CGEventTapPostEvent(_proxy, _newEventUp);
         CFRelease(_newEventDown);
+        CFRelease(_newEventUp);
     }
     
     void SendVirtualKey(const Byte& vKey) {
@@ -425,9 +448,13 @@ extern "C" {
         }
         
         _newEventDown = CGEventCreateKeyboardEvent(myEventSource, 0, true);
+        _newEventUp = CGEventCreateKeyboardEvent(myEventSource, 0, false);
         CGEventKeyboardSetUnicodeString(_newEventDown, _willContinuteSending ? 16 : _newCharSize - offset, _newCharString);
+        CGEventKeyboardSetUnicodeString(_newEventUp, _willContinuteSending ? 16 : _newCharSize - offset, _newCharString);
         CGEventTapPostEvent(_proxy, _newEventDown);
+        CGEventTapPostEvent(_proxy, _newEventUp);
         CFRelease(_newEventDown);
+        CFRelease(_newEventUp);
 
         if (_willContinuteSending) {
             SendNewCharString(dataFromMacro, dataFromMacro ? _k : 16);
@@ -517,37 +544,43 @@ extern "C" {
                 if (GET_SWITCH_KEY(vSwitchKeyStatus) == _keycode && checkHotKey(vSwitchKeyStatus, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)){
                     switchLanguage();
                     _lastFlag = 0;
+                    _hasJustUsedHotKey = true;
                     return NULL;
                 }
                 if (GET_SWITCH_KEY(convertToolHotKey) == _keycode && checkHotKey(convertToolHotKey, GET_SWITCH_KEY(convertToolHotKey) != 0xFE)){
                     [appDelegate onQuickConvert];
                     _lastFlag = 0;
+                    _hasJustUsedHotKey = true;
                     return NULL;
                 }
             }
+            _hasJustUsedHotKey = _lastFlag != 0;
         } else if (type == kCGEventFlagsChanged) {
             if (_lastFlag == 0 || _lastFlag < _flag) {
                 _lastFlag = _flag;
             } else if (_lastFlag > _flag)  {
-                //check temporarily turn off spell checking
-                if (vTempOffSpelling && _lastFlag & kCGEventFlagMaskControl) {
-                    vTempOffSpellChecking();
-                }
-                if (vTempOffOpenKey && _lastFlag & kCGEventFlagMaskCommand) {
-                    vTempOffEngine();
-                }
                 //check switch
                 if (checkHotKey(vSwitchKeyStatus, GET_SWITCH_KEY(vSwitchKeyStatus) != 0xFE)) {
                     _lastFlag = 0;
                     switchLanguage();
+                    _hasJustUsedHotKey = true;
                     return NULL;
                 }
                 if (checkHotKey(convertToolHotKey, GET_SWITCH_KEY(convertToolHotKey) != 0xFE)) {
                     _lastFlag = 0;
                     [appDelegate onQuickConvert];
+                    _hasJustUsedHotKey = true;
                     return NULL;
                 }
+                //check temporarily turn off spell checking
+                if (vTempOffSpelling && !_hasJustUsedHotKey && _lastFlag & kCGEventFlagMaskControl) {
+                    vTempOffSpellChecking();
+                }
+                if (vTempOffOpenKey && !_hasJustUsedHotKey && _lastFlag & kCGEventFlagMaskCommand) {
+                    vTempOffEngine();
+                }
                 _lastFlag = 0;
+                _hasJustUsedHotKey = false;
             }
         }
 
